@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Regras para o trabalho da NP2: qualquer pessoa com o app pode ler e gravar
+// na coleção "provas". Servem só para o período do trabalho; não use em produção.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /provas/{provaId} {
+      allow read, write: if true;
+    }
+  }
+}
