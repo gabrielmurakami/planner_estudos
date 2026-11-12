@@ -1,10 +1,7 @@
 /// Funções de data usadas nas três telas.
 library;
 
-const _meses = [
-  'JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN',
-  'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ',
-];
+const _meses = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 const _diasSemana = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
 
 String doisDigitos(int n) => n.toString().padLeft(2, '0');
@@ -42,6 +39,7 @@ int diasAte(DateTime data, [DateTime? agora]) {
   return b.difference(a).inDays;
 }
 
+/// Contagem curta para listas: "em 9 dias", "amanhã", "hoje", "já passou".
 String textoContagem(int dias) {
   if (dias > 1) return 'em $dias dias';
   if (dias == 1) return 'amanhã';
@@ -49,5 +47,11 @@ String textoContagem(int dias) {
   return 'já passou';
 }
 
-bool mesmoDia(DateTime a, DateTime b) =>
-    a.year == b.year && a.month == b.month && a.day == b.day;
+/// Contagem do selo do card de destaque: "Faltam 9 dias", "Falta 1 dia", "É hoje!".
+String textoFaltam(int dias) {
+  if (dias <= 0) return 'É hoje!';
+  if (dias == 1) return 'Falta 1 dia';
+  return 'Faltam $dias dias';
+}
+
+bool mesmoDia(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;

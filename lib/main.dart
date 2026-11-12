@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'pages/home_page.dart';
 import 'theme/cores.dart';
+import 'widgets/componentes.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,9 +60,7 @@ class PlannerApp extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         ),
       ),
-      home: erroFirebase == null
-          ? const HomePage()
-          : _TelaErroFirebase(erro: erroFirebase!),
+      home: erroFirebase == null ? const HomePage() : _TelaErroFirebase(erro: erroFirebase!),
     );
   }
 }
@@ -75,12 +74,7 @@ class _TelaErroFirebase extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Planner de Estudos'),
-        centerTitle: true,
-        backgroundColor: Cores.royal,
-        foregroundColor: Colors.white,
-      ),
+      appBar: barraDoApp('Planner de Estudos'),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),

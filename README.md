@@ -18,6 +18,7 @@ Os dados ficam no **Cloud Firestore** e são compartilhados em tempo real: o que
 8. [Recurso adicional: BrasilAPI](#8-recurso-adicional-brasilapi)
 9. [Onde está cada requisito](#9-onde-está-cada-requisito)
 10. [Problemas comuns](#10-problemas-comuns)
+11. [Histórico de mudanças](#11-histórico-de-mudanças)
 
 ---
 
@@ -224,7 +225,7 @@ Marque a plataforma **web** (e Android, se quiser). O comando substitui o `lib/f
 | `flutter pub get` | Baixa as dependências do `pubspec.yaml` |
 | `flutter run -d chrome` | Roda o app no Chrome em modo debug |
 | `flutter analyze` | Procura erros e avisos no código |
-| `flutter test` | Roda os testes de `test/` (funções de data) |
+| `flutter test` | Roda os testes de `test/` (funções de data e do modelo `Prova`) |
 | `flutter build web` | Gera a versão final em `build/web/` |
 | `flutter clean` | Apaga os arquivos de build. Use quando algo "travar" sem motivo e rode `flutter pub get` em seguida |
 
@@ -244,16 +245,18 @@ planner_estudos/
 │   │   ├── nova_prova_page.dart       # Tela 2 — Nova prova (formulário)
 │   │   └── agenda_page.dart           # Tela 3 — Agenda em tempo real
 │   ├── services/
+│   │   ├── provas_service.dart        # Único ponto de acesso à coleção "provas" (add, snapshots, update, delete)
 │   │   ├── feriados_service.dart      # BrasilAPI com o pacote http (com cache por ano)
-│   │   └── exemplos.dart              # 3 provas de exemplo para a demonstração
+│   │   └── exemplos.dart              # 3 provas de exemplo + tópicos que pré-preenchem o formulário
 │   ├── theme/
 │   │   └── cores.dart                 # Paleta: #001178 #0028B3 #1883FF #75C3FF #C5DBFF
 │   ├── utils/
 │   │   └── datas.dart                 # Formatação e leitura de datas (dd/mm/aaaa)
 │   └── widgets/
-│       └── componentes.dart           # BlocoData, Etiqueta, CartaoBranco, BarraProgresso, RotuloSecao
+│       └── componentes.dart           # Widgets reutilizados: barraDoApp, BlocoData, Etiqueta, CartaoBranco,
+│                                      # BarraProgresso, RotuloSecao, ItemTopico, MensagemErro, mostrarAviso
 ├── assets/images/                     # capa_estudos.png, banner_nova_prova.png, agenda_vazia.png
-├── test/widget_test.dart              # Testes de lerData, diasAte e textoContagem
+├── test/widget_test.dart              # Testes de datas (lerData, diasAte, textoContagem, textoFaltam) e de Prova
 ├── web/                               # index.html, manifest e ícones da versão web
 ├── firestore.rules                    # Regras do Firestore (coleção "provas")
 ├── firebase.json                      # Gerado pelo flutterfire configure
@@ -301,10 +304,14 @@ planner_estudos/
 
 | Operação | Onde |
 |---|---|
-| `add()` | Salvar uma prova (`nova_prova_page.dart`) e as provas de exemplo (`exemplos.dart`) |
-| `orderBy('data').snapshots()` + `StreamBuilder` | Listas em tempo real (`home_page.dart`, `agenda_page.dart`) |
-| `update()` | Marcar um tópico como estudado (`agenda_page.dart`) |
-| `delete()` | Excluir uma prova (`agenda_page.dart`) |
+Todas as operações ficam em `lib/services/provas_service.dart` (classe `ProvasService`). As telas só chamam esses métodos e nunca acessam o Firestore direto.
+
+| Operação | Método em `ProvasService` | Quem chama |
+|---|---|---|
+| `add()` | `adicionar(prova)` | Salvar uma prova (`nova_prova_page.dart`) e as provas de exemplo (`exemplos.dart`) |
+| `orderBy('data').snapshots()` | `todasEmTempoReal()` (já converte os documentos em `List<Prova>`) | `StreamBuilder` em `home_page.dart` e `agenda_page.dart` |
+| `update()` | `atualizarTopicos(id, topicos)` | Marcar um tópico como estudado (`agenda_page.dart`) |
+| `delete()` | `excluir(id)` | Excluir uma prova (`agenda_page.dart`) |
 
 ### Regras de segurança
 
@@ -332,14 +339,14 @@ Checklist para a apresentação:
 
 | Req. | O que pede | Onde mostrar no app | Onde está no código |
 |---|---|---|---|
-| RF01 | Scaffold, AppBar personalizada, TextStyle | As 3 telas | `AppBar(title, centerTitle, backgroundColor)` em cada página |
+| RF01 | Scaffold, AppBar personalizada, TextStyle | As 3 telas `barraDoApp()` em `componentes.dart` monta o `AppBar(title, centerTitle, backgroundColor)` com `TextStyle` próprio, usado em cada página |
 | RF02 | 2+ imagens com BoxFit e ícones | Capa da próxima prova (`BoxFit.cover`), banner da Nova prova (`BoxFit.cover`), ilustração da agenda vazia (`BoxFit.contain`) | `Image.asset` em `home_page.dart`, `nova_prova_page.dart` e `agenda_page.dart` |
 | RF03 | Column/Row, SingleChildScrollView, Stack + Positioned | Card da próxima prova (textos e selo "Faltam X dias" sobre a imagem) | `_CartaoProximaProva` em `home_page.dart` |
 | RF04 | 3 páginas em arquivos separados, Navigator com parâmetros | Toque numa avaliação da tela inicial: a agenda abre filtrada por NP1/NP2/Exame. Ao salvar, a Nova prova devolve a disciplina para a tela inicial (SnackBar) | `AgendaPage(filtroInicial: ...)` e `Navigator.pop(context, disciplina)` |
 | RF05 | StatefulWidget + setState | A pré-visualização muda enquanto você digita | `_NovaProvaPageState._aoDigitar` |
 | RF06 | 3+ TextFields com label, controller e onChanged | Disciplina, Professor(a), Sala, Data e Novo tópico (5 campos) | `TextEditingController` + `.text` em `_salvar()` |
-| RF07 | Checkbox e grupo de Radio com enum | Tópicos com `CheckboxListTile`; tipo com `RadioGroup<TipoAvaliacao>` | `_ListaTopicos` e `_OpcaoTipo` |
-| RF08 | add(), snapshots(), StreamBuilder, indicador de carregamento | Salvar uma prova e vê-la aparecer na agenda (e no console do Firebase) | `.add(prova.toMap())`, `StreamBuilder` + `CircularProgressIndicator` |
+| RF07 | Checkbox e grupo de Radio com enum | Tópicos com `CheckboxListTile`; tipo com `RadioGroup<TipoAvaliacao>` | `_ListaTopicos` + `ItemTopico` (`componentes.dart`) e `_OpcaoTipo` |
+| RF08 | add(), snapshots(), StreamBuilder, indicador de carregamento | Salvar uma prova e vê-la aparecer na agenda (e no console do Firebase) | `ProvasService.adicionar` (`.add(prova.toMap())`) e `todasEmTempoReal` (`.snapshots()`), `StreamBuilder` + `CircularProgressIndicator` |
 | RF09 | Recurso adicional | Card "Próximo feriado" e aviso de feriado no formulário (teste a data 20/11/2026) | `services/feriados_service.dart` |
 
 ---
@@ -360,3 +367,32 @@ Checklist para a apresentação:
 | Aviso sobre a fonte `CupertinoIcons` no build | O app não usa esses ícones | Pode ignorar |
 
 **Dica para o laboratório:** antes da apresentação, teste a internet da máquina (o Firestore e a BrasilAPI dependem dela) e leve um vídeo curto do app funcionando como plano B.
+
+---
+
+## 11. Histórico de mudanças
+
+### Refatoração (novembro de 2026)
+
+O comportamento visível do app é o mesmo. O código foi reorganizado para ficar mais fácil de entender e de manter.
+
+**Correções**
+- **Agenda piscando o carregamento:** o stream do Firestore era recriado a cada `setState`, e o `StreamBuilder` reabria a conexão. Abrir um card, marcar um tópico ou trocar o filtro mostrava o `CircularProgressIndicator` de novo. Agora o stream é criado uma única vez no `State` (Início e Agenda), e o carregamento só aparece enquanto ainda não chegou nenhum dado (`!snapshot.hasData`).
+- **Erros sem tratamento na Agenda:** se marcar um tópico ou excluir uma prova falhasse (sem internet, regras do Firestore...), o erro se perdia. Agora o app mostra uma mensagem (SnackBar).
+
+**Organização**
+- **`ProvasService`** (novo, `lib/services/provas_service.dart`): reúne todo o acesso à coleção `provas`. Antes, `FirebaseFirestore.instance.collection('provas')` aparecia em quatro arquivos.
+- **`Topico` imutável:** os campos são `final`, e marcar um tópico cria uma cópia com `copyWith`. `Prova.topicosComMarcacao()` gera a lista atualizada para o Firestore.
+- **Funções auxiliares no modelo:** `Prova.descreverLocal()` e `Prova.contarEstudados()` substituem código que estava repetido no modelo e no formulário.
+- **Componentes compartilhados** em `componentes.dart`:
+  - `barraDoApp()`: a AppBar padrão das 3 telas (antes era copiada em 4 lugares).
+  - `ItemTopico`: o Checkbox de tópico, riscado quando estudado (usado no formulário e na agenda).
+  - `MensagemErro`: a mensagem de erro de leitura do Firestore.
+  - `mostrarAviso()`: atalho para o SnackBar.
+- **Feriados:** `FeriadosService.procurar()` e `FeriadosService.desteAnoEDoProximo()` substituem as buscas repetidas na Agenda.
+- **Datas:** o texto do selo "Faltam X dias" virou a função `textoFaltam()` em `datas.dart`, com teste.
+- **Telas divididas em partes menores:** `_LinhaAvaliacao` (Início), `_FiltrosTipo`, e o `_CartaoProva` com `_resumo()` e `_detalhes()` (Agenda), e a validação do formulário em `_validar()` (Nova prova).
+- **Cores:** o vermelho do botão "Excluir prova" virou `Cores.perigo`.
+- **Exemplos:** os tópicos de Estatística ficam num só lugar (`topicosDeEstatistica`), usado nas provas de exemplo e no formulário pré-preenchido.
+- **Testes:** além das funções de data, agora cobrem `textoFaltam`, o progresso de `Prova`, `topicosComMarcacao` e `descreverLocal`.
+- **`CartaoBranco`:** passou a envolver o conteúdo num `Material` transparente, para o efeito de toque (splash) dos itens aparecer por cima do fundo branco.

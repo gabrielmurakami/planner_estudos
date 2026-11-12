@@ -1,9 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/prova.dart';
 import '../services/exemplos.dart';
 import '../services/feriados_service.dart';
+import '../services/provas_service.dart';
 import '../theme/cores.dart';
 import '../utils/datas.dart';
 import '../widgets/componentes.dart';
@@ -12,11 +12,22 @@ import 'nova_prova_page.dart';
 
 /// Tela 1 — Início: próxima prova, o que falta estudar, próximas avaliações
 /// e o próximo feriado (BrasilAPI).
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  // Criado uma única vez: se fosse criado no build, cada redesenho
+  // reabriria a conexão com o Firestore e mostraria o carregamento de novo.
+  final _provas = ProvasService.todasEmTempoReal();
+
+  // ---------- Navegação ----------
+
   // Aula 05: navegação com passagem de parâmetro (o filtro da agenda).
-  void _abrirAgenda(BuildContext context, {TipoAvaliacao? filtro}) {
+  void _abrirAgenda({TipoAvaliacao? filtro}) {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => AgendaPage(filtroInicial: filtro)),
@@ -24,59 +35,51 @@ class HomePage extends StatelessWidget {
   }
 
   // A tela Nova prova devolve o nome da disciplina salva (dado de volta).
-  Future<void> _abrirNovaProva(BuildContext context) async {
+  Future<void> _abrirNovaProva() async {
     final disciplina = await Navigator.push<String>(
       context,
       MaterialPageRoute(builder: (context) => const NovaProvaPage()),
     );
-    if (disciplina != null && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$disciplina foi salva na agenda.')),
-      );
+    if (disciplina != null && mounted) {
+      mostrarAviso(context, '$disciplina foi salva na agenda.');
     }
   }
+
+  // ---------- Interface ----------
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Planner de Estudos',
-          style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: Colors.white),
-        ),
-        centerTitle: true,
-        backgroundColor: Cores.royal,
-        foregroundColor: Colors.white,
+      appBar: barraDoApp(
+        'Planner de Estudos',
         actions: [
           IconButton(
             tooltip: 'Agenda de provas',
             icon: const Icon(Icons.calendar_month_outlined),
-            onPressed: () => _abrirAgenda(context),
+            onPressed: _abrirAgenda,
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _abrirNovaProva(context),
+        onPressed: _abrirNovaProva,
         backgroundColor: Cores.royal,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('Nova prova'),
       ),
       // Aula 09: leitura em tempo real da coleção "provas".
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance.collection('provas').orderBy('data').snapshots(),
+      body: StreamBuilder<List<Prova>>(
+        stream: _provas,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return _MensagemErro(erro: snapshot.error);
+            return MensagemErro(erro: snapshot.error);
           }
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final provas = snapshot.data!.docs
-              .map(Prova.fromDoc)
-              .where((p) => p.diasRestantes >= 0)
-              .toList();
+          // Na tela inicial só interessam as provas de hoje em diante.
+          final provas = snapshot.data!.where((p) => p.diasRestantes >= 0).toList();
 
           // Aula 04: tela longa com SingleChildScrollView + Column.
           return SingleChildScrollView(
@@ -85,19 +88,16 @@ class HomePage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (provas.isEmpty)
-                  _EstadoVazio(onCadastrar: () => _abrirNovaProva(context))
+                  _EstadoVazio(onCadastrar: _abrirNovaProva)
                 else ...[
-                  _CartaoProximaProva(
-                    prova: provas.first,
-                    onTap: () => _abrirAgenda(context),
-                  ),
+                  _CartaoProximaProva(prova: provas.first, onTap: _abrirAgenda),
                   const SizedBox(height: 18),
                   _CartaoOQueFaltaEstudar(provas: provas.take(4).toList()),
                   const SizedBox(height: 18),
                   _ProximasAvaliacoes(
                     provas: provas.skip(1).take(3).toList(),
-                    onVerAgenda: () => _abrirAgenda(context),
-                    onTapProva: (p) => _abrirAgenda(context, filtro: p.tipo),
+                    onVerAgenda: _abrirAgenda,
+                    onTapProva: (p) => _abrirAgenda(filtro: p.tipo),
                   ),
                 ],
                 const SizedBox(height: 18),
@@ -118,13 +118,6 @@ class _CartaoProximaProva extends StatelessWidget {
 
   final Prova prova;
   final VoidCallback onTap;
-
-  String get _textoFaltam {
-    final n = prova.diasRestantes;
-    if (n == 0) return 'É hoje!';
-    if (n == 1) return 'Falta 1 dia';
-    return 'Faltam $n dias';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,7 +184,7 @@ class _CartaoProximaProva extends StatelessWidget {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      _textoFaltam,
+                      textoFaltam(prova.diasRestantes),
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -241,7 +234,11 @@ class _CartaoOQueFaltaEstudar extends StatelessWidget {
                   child: Text(
                     p.disciplina,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Cores.texto),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Cores.texto,
+                    ),
                   ),
                 ),
                 Text(
@@ -297,44 +294,57 @@ class _ProximasAvaliacoes extends StatelessWidget {
               children: [
                 for (var i = 0; i < provas.length; i++) ...[
                   if (i > 0) const Divider(height: 1, color: Cores.trilho),
-                  InkWell(
-                    onTap: () => onTapProva(provas[i]),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      child: Row(
-                        children: [
-                          BlocoData(data: provas[i].data, escuro: false, largura: 44, altura: 44),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  provas[i].disciplina,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Cores.texto,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${provas[i].tipo.rotulo} · ${textoContagem(provas[i].diasRestantes)}',
-                                  style: const TextStyle(fontSize: 12, color: Cores.textoSuave),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right, color: Cores.textoSuave),
-                        ],
-                      ),
-                    ),
-                  ),
+                  _LinhaAvaliacao(prova: provas[i], onTap: () => onTapProva(provas[i])),
                 ],
               ],
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Uma linha da lista "Próximas avaliações".
+class _LinhaAvaliacao extends StatelessWidget {
+  const _LinhaAvaliacao({required this.prova, required this.onTap});
+
+  final Prova prova;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            BlocoData(data: prova.data, escuro: false, largura: 44, altura: 44),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    prova.disciplina,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Cores.texto,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${prova.tipo.rotulo} · ${textoContagem(prova.diasRestantes)}',
+                    style: const TextStyle(fontSize: 12, color: Cores.textoSuave),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Cores.textoSuave),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -359,10 +369,7 @@ class _CartaoFeriadoState extends State<_CartaoFeriado> {
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(
-              color: Cores.gelo,
-              borderRadius: BorderRadius.circular(10),
-            ),
+            decoration: BoxDecoration(color: Cores.gelo, borderRadius: BorderRadius.circular(10)),
             child: const Icon(Icons.wb_sunny_outlined, color: Cores.royal, size: 22),
           ),
           const SizedBox(width: 12),
@@ -370,16 +377,16 @@ class _CartaoFeriadoState extends State<_CartaoFeriado> {
             child: FutureBuilder<Feriado?>(
               future: _proximo,
               builder: (context, snapshot) {
+                final feriado = snapshot.data;
                 final String linha;
                 if (snapshot.connectionState != ConnectionState.done) {
                   linha = 'Consultando…';
                 } else if (snapshot.hasError) {
                   linha = 'Não foi possível consultar agora';
-                } else if (snapshot.data == null) {
+                } else if (feriado == null) {
                   linha = 'Nenhum feriado encontrado';
                 } else {
-                  final f = snapshot.data!;
-                  linha = '${diaSemanaEData(f.data)} · ${f.nome}';
+                  linha = '${diaSemanaEData(feriado.data)} · ${feriado.nome}';
                 }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,11 +432,7 @@ class _EstadoVazioState extends State<_EstadoVazio> {
     try {
       await adicionarProvasDeExemplo();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Não foi possível salvar: $e')),
-        );
-      }
+      if (mounted) mostrarAviso(context, 'Não foi possível salvar: $e');
     }
     if (mounted) setState(() => _adicionando = false);
   }
@@ -468,26 +471,6 @@ class _EstadoVazioState extends State<_EstadoVazio> {
             child: Text(_adicionando ? 'Adicionando…' : 'Adicionar 3 provas de exemplo'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _MensagemErro extends StatelessWidget {
-  const _MensagemErro({required this.erro});
-
-  final Object? erro;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          'Erro ao ler o Firestore:\n$erro',
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Cores.textoSuave),
-        ),
       ),
     );
   }

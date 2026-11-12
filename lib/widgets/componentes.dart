@@ -97,14 +97,17 @@ class CartaoBranco extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // O Material transparente dá aos ListTile/InkWell filhos uma superfície
+    // própria para desenhar o splash por cima do fundo branco do Container.
     return Container(
       padding: padding,
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Cores.borda),
       ),
-      child: child,
+      child: Material(type: MaterialType.transparency, child: child),
     );
   }
 }
@@ -142,4 +145,83 @@ class RotuloSecao extends StatelessWidget {
       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Cores.texto),
     );
   }
+}
+
+/// AppBar padrão das telas: título em branco, centralizado, fundo azul royal.
+AppBar barraDoApp(String titulo, {List<Widget>? actions}) {
+  return AppBar(
+    title: Text(
+      titulo,
+      style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: Colors.white),
+    ),
+    centerTitle: true,
+    backgroundColor: Cores.royal,
+    foregroundColor: Colors.white,
+    actions: actions,
+  );
+}
+
+/// Linha de tópico com Checkbox; riscada quando o tópico já foi estudado.
+/// [acaoExtra] aparece à direita (ex.: botão de remover no formulário).
+class ItemTopico extends StatelessWidget {
+  const ItemTopico({
+    super.key,
+    required this.titulo,
+    required this.estudado,
+    required this.onChanged,
+    this.acaoExtra,
+    this.tamanhoFonte = 15,
+  });
+
+  final String titulo;
+  final bool estudado;
+  final ValueChanged<bool> onChanged;
+  final Widget? acaoExtra;
+  final double tamanhoFonte;
+
+  @override
+  Widget build(BuildContext context) {
+    return CheckboxListTile(
+      value: estudado,
+      onChanged: (valor) => onChanged(valor ?? false),
+      controlAffinity: ListTileControlAffinity.leading,
+      activeColor: Cores.royal,
+      dense: true,
+      secondary: acaoExtra,
+      title: Text(
+        titulo,
+        style: TextStyle(
+          fontSize: tamanhoFonte,
+          color: estudado ? Cores.textoSuave : Cores.texto,
+          decoration: estudado ? TextDecoration.lineThrough : null,
+        ),
+      ),
+    );
+  }
+}
+
+/// Mensagem centralizada para quando a leitura do Firestore falha.
+class MensagemErro extends StatelessWidget {
+  const MensagemErro({super.key, required this.erro});
+
+  final Object? erro;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          'Erro ao ler o Firestore:\n$erro',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Cores.textoSuave),
+        ),
+      ),
+    );
+  }
+}
+
+/// Mostra uma mensagem rápida na parte de baixo da tela.
+void mostrarAviso(BuildContext context, String mensagem) {
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagem)));
 }

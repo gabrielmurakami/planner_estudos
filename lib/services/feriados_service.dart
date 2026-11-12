@@ -22,8 +22,7 @@ class FeriadosService {
   static final Map<int, Future<List<Feriado>>> _cache = {};
 
   /// Lista de feriados do ano (cada ano é consultado uma única vez).
-  static Future<List<Feriado>> doAno(int ano) =>
-      _cache.putIfAbsent(ano, () => _buscar(ano));
+  static Future<List<Feriado>> doAno(int ano) => _cache.putIfAbsent(ano, () => _buscar(ano));
 
   static Future<List<Feriado>> _buscar(int ano) async {
     try {
@@ -36,11 +35,7 @@ class FeriadosService {
       return lista.map((item) {
         final mapa = item as Map<String, dynamic>;
         final partes = (mapa['date'] as String).split('-');
-        final data = DateTime(
-          int.parse(partes[0]),
-          int.parse(partes[1]),
-          int.parse(partes[2]),
-        );
+        final data = DateTime(int.parse(partes[0]), int.parse(partes[1]), int.parse(partes[2]));
         return Feriado(data, mapa['name'] as String);
       }).toList();
     } catch (_) {
@@ -51,12 +46,29 @@ class FeriadosService {
   }
 
   /// O feriado que cai em [data], ou null se for dia comum.
-  static Future<Feriado?> naData(DateTime data) async {
-    final lista = await doAno(data.year);
+  static Future<Feriado?> naData(DateTime data) async => procurar(await doAno(data.year), data);
+
+  /// Procura em [lista] o feriado que cai em [data] (sem consultar a API).
+  static Feriado? procurar(List<Feriado> lista, DateTime data) {
     for (final f in lista) {
       if (mesmoDia(f.data, data)) return f;
     }
     return null;
+  }
+
+  /// Feriados deste ano e do próximo. Se um dos anos falhar (sem internet),
+  /// devolve só o que conseguiu, sem lançar erro.
+  static Future<List<Feriado>> desteAnoEDoProximo() async {
+    final ano = DateTime.now().year;
+    final lista = <Feriado>[];
+    for (final a in [ano, ano + 1]) {
+      try {
+        lista.addAll(await doAno(a));
+      } catch (_) {
+        // Ignora: quem chama segue funcionando sem os feriados deste ano.
+      }
+    }
+    return lista;
   }
 
   /// O próximo feriado a partir de hoje.

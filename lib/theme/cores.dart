@@ -21,4 +21,7 @@ class Cores {
   static const alertaFundo = Color(0xFFFFF7E6);
   static const alertaBorda = Color(0xFFF3DDB0);
   static const alertaTexto = Color(0xFF6B4A00);
+
+  // Vermelho para ações destrutivas (excluir prova).
+  static const perigo = Color(0xFFB42318);
 }

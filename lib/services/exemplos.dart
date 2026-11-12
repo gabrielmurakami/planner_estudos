@@ -1,11 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../models/prova.dart';
+import 'provas_service.dart';
 
 /// Cadastra três provas de exemplo na coleção "provas", para a lista já
 /// nascer populada na apresentação (seção 10 do PDF).
 Future<void> adicionarProvasDeExemplo() async {
-  final colecao = FirebaseFirestore.instance.collection('provas');
   final hoje = DateTime.now();
 
   final exemplos = [
@@ -15,7 +13,7 @@ Future<void> adicionarProvasDeExemplo() async {
       sala: 'Lab 2',
       data: hoje.add(const Duration(days: 9)),
       tipo: TipoAvaliacao.np2,
-      topicos: [
+      topicos: const [
         Topico(titulo: 'Modelo entidade-relacionamento', estudado: true),
         Topico(titulo: 'Normalização', estudado: true),
         Topico(titulo: 'Consultas com JOIN'),
@@ -28,12 +26,7 @@ Future<void> adicionarProvasDeExemplo() async {
       sala: 'Sala 12',
       data: hoje.add(const Duration(days: 11)),
       tipo: TipoAvaliacao.np2,
-      topicos: [
-        Topico(titulo: 'Média, moda e mediana', estudado: true),
-        Topico(titulo: 'Desvio padrão e variância', estudado: true),
-        Topico(titulo: 'Distribuição normal'),
-        Topico(titulo: 'Probabilidade básica'),
-      ],
+      topicos: topicosDeEstatistica,
     ),
     Prova(
       disciplina: 'Desenvolvimento Mobile',
@@ -41,7 +34,7 @@ Future<void> adicionarProvasDeExemplo() async {
       sala: 'Laboratório',
       data: hoje.add(const Duration(days: 14)),
       tipo: TipoAvaliacao.np2,
-      topicos: [
+      topicos: const [
         Topico(titulo: 'Widgets e layouts', estudado: true),
         Topico(titulo: 'Navegação entre páginas', estudado: true),
         Topico(titulo: 'TextField, Checkbox e Radio'),
@@ -51,6 +44,15 @@ Future<void> adicionarProvasDeExemplo() async {
   ];
 
   for (final prova in exemplos) {
-    await colecao.add(prova.toMap());
+    await ProvasService.adicionar(prova);
   }
 }
+
+/// Tópicos de Estatística: usados num exemplo acima e no formulário,
+/// que já abre preenchido para agilizar a demonstração.
+const topicosDeEstatistica = [
+  Topico(titulo: 'Média, moda e mediana', estudado: true),
+  Topico(titulo: 'Desvio padrão e variância', estudado: true),
+  Topico(titulo: 'Distribuição normal'),
+  Topico(titulo: 'Probabilidade básica'),
+];

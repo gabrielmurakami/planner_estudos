@@ -1,8 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/prova.dart';
+import '../services/exemplos.dart';
 import '../services/feriados_service.dart';
+import '../services/provas_service.dart';
 import '../theme/cores.dart';
 import '../utils/datas.dart';
 import '../widgets/componentes.dart';
@@ -29,16 +30,17 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
   );
   final _topicoCtrl = TextEditingController();
 
-  final List<Topico> _topicos = [
-    Topico(titulo: 'Média, moda e mediana', estudado: true),
-    Topico(titulo: 'Desvio padrão e variância', estudado: true),
-    Topico(titulo: 'Distribuição normal'),
-    Topico(titulo: 'Probabilidade básica'),
-  ];
+  final List<Topico> _topicos = List.of(topicosDeEstatistica);
 
   TipoAvaliacao _tipo = TipoAvaliacao.np2;
+
+  /// Feriado na data digitada (null = dia comum ou data inválida).
   Feriado? _feriado;
+
   bool _salvando = false;
+
+  /// Número da consulta de feriado mais recente. Se o usuário digitar rápido,
+  /// respostas antigas da BrasilAPI chegam depois e precisam ser ignoradas.
   int _consultaFeriado = 0;
 
   @override
@@ -59,6 +61,7 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
 
   // ---------- Ações ----------
 
+  /// Redesenha a tela para a pré-visualização acompanhar o que foi digitado.
   void _aoDigitar(String _) => setState(() {});
 
   void _aoMudarData(String _) {
@@ -106,8 +109,24 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
     });
   }
 
-  void _avisar(String mensagem) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensagem)));
+  void _marcarTopico(int indice, bool estudado) {
+    setState(() => _topicos[indice] = _topicos[indice].copyWith(estudado: estudado));
+  }
+
+  void _removerTopico(int indice) {
+    setState(() => _topicos.removeAt(indice));
+  }
+
+  void _mudarTipo(TipoAvaliacao? tipo) {
+    if (tipo != null) setState(() => _tipo = tipo);
+  }
+
+  /// Devolve a mensagem do primeiro problema do formulário, ou null se está ok.
+  String? _validar(String disciplina, DateTime? data) {
+    if (disciplina.isEmpty) return 'Informe a disciplina.';
+    if (data == null) return 'Data inválida. Use o formato dd/mm/aaaa.';
+    if (_topicos.isEmpty) return 'Adicione pelo menos um tópico do conteúdo.';
+    return null;
   }
 
   Future<void> _salvar() async {
@@ -115,16 +134,9 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
     final disciplina = _disciplinaCtrl.text.trim();
     final data = lerData(_dataCtrl.text);
 
-    if (disciplina.isEmpty) {
-      _avisar('Informe a disciplina.');
-      return;
-    }
-    if (data == null) {
-      _avisar('Data inválida. Use o formato dd/mm/aaaa.');
-      return;
-    }
-    if (_topicos.isEmpty) {
-      _avisar('Adicione pelo menos um tópico do conteúdo.');
+    final erro = _validar(disciplina, data);
+    if (erro != null) {
+      mostrarAviso(context, erro);
       return;
     }
 
@@ -132,21 +144,21 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
       disciplina: disciplina,
       professor: _professorCtrl.text.trim(),
       sala: _salaCtrl.text.trim(),
-      data: data,
+      data: data!,
       tipo: _tipo,
-      topicos: _topicos,
+      topicos: List.of(_topicos),
     );
 
     setState(() => _salvando = true);
     try {
-      // Aula 09: gravação de um novo documento com add().
-      await FirebaseFirestore.instance.collection('provas').add(prova.toMap());
+      // Aula 09: gravação de um novo documento com add() (ver ProvasService).
+      await ProvasService.adicionar(prova);
       if (!mounted) return;
       Navigator.pop(context, disciplina); // devolve um dado para a tela anterior
     } catch (e) {
       if (!mounted) return;
       setState(() => _salvando = false);
-      _avisar('Não foi possível salvar: $e');
+      mostrarAviso(context, 'Não foi possível salvar: $e');
     }
   }
 
@@ -155,18 +167,9 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
   @override
   Widget build(BuildContext context) {
     final data = lerData(_dataCtrl.text);
-    final estudados = _topicos.where((t) => t.estudado).length;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Nova prova',
-          style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700, color: Colors.white),
-        ),
-        centerTitle: true,
-        backgroundColor: Cores.royal,
-        foregroundColor: Colors.white,
-      ),
+      appBar: barraDoApp('Nova prova'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         child: Column(
@@ -194,11 +197,10 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
             const SizedBox(height: 8),
             _PreVisualizacao(
               disciplina: _disciplinaCtrl.text.trim(),
-              professor: _professorCtrl.text.trim(),
-              sala: _salaCtrl.text.trim(),
+              local: Prova.descreverLocal(_professorCtrl.text.trim(), _salaCtrl.text.trim()),
               data: data,
               tipo: _tipo,
-              estudados: estudados,
+              estudados: Prova.contarEstudados(_topicos),
               total: _topicos.length,
             ),
             const SizedBox(height: 20),
@@ -220,10 +222,7 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
                     controller: _professorCtrl,
                     onChanged: _aoDigitar,
                     textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Professor(a)',
-                      hintText: 'Nome',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Professor(a)', hintText: 'Nome'),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -231,10 +230,7 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
                   child: TextField(
                     controller: _salaCtrl,
                     onChanged: _aoDigitar,
-                    decoration: const InputDecoration(
-                      labelText: 'Sala',
-                      hintText: 'Ex.: Lab 3',
-                    ),
+                    decoration: const InputDecoration(labelText: 'Sala', hintText: 'Ex.: Lab 3'),
                   ),
                 ),
               ],
@@ -246,8 +242,8 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
             _ListaTopicos(
               topicos: _topicos,
               controller: _topicoCtrl,
-              onMarcar: (i, valor) => setState(() => _topicos[i].estudado = valor),
-              onRemover: (i) => setState(() => _topicos.removeAt(i)),
+              onMarcar: _marcarTopico,
+              onRemover: _removerTopico,
               onAdicionar: _adicionarTopico,
             ),
             const SizedBox(height: 20),
@@ -277,9 +273,7 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
             // Aula 08: grupo de Radio com enum, usando RadioGroup.
             RadioGroup<TipoAvaliacao>(
               groupValue: _tipo,
-              onChanged: (valor) {
-                if (valor != null) setState(() => _tipo = valor);
-              },
+              onChanged: _mudarTipo,
               child: Row(
                 children: [
                   for (final t in TipoAvaliacao.values) ...[
@@ -288,7 +282,7 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
                       child: _OpcaoTipo(
                         tipo: t,
                         selecionado: t == _tipo,
-                        onTap: () => setState(() => _tipo = t),
+                        onTap: () => _mudarTipo(t),
                       ),
                     ),
                   ],
@@ -330,8 +324,7 @@ class _NovaProvaPageState extends State<NovaProvaPage> {
 class _PreVisualizacao extends StatelessWidget {
   const _PreVisualizacao({
     required this.disciplina,
-    required this.professor,
-    required this.sala,
+    required this.local,
     required this.data,
     required this.tipo,
     required this.estudados,
@@ -339,8 +332,9 @@ class _PreVisualizacao extends StatelessWidget {
   });
 
   final String disciplina;
-  final String professor;
-  final String sala;
+  final String local;
+
+  /// null quando o texto digitado não é uma data válida.
   final DateTime? data;
   final TipoAvaliacao tipo;
   final int estudados;
@@ -348,10 +342,6 @@ class _PreVisualizacao extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final local = [
-      if (professor.isNotEmpty) 'Prof. $professor',
-      if (sala.isNotEmpty) sala,
-    ].join(' · ');
     final d = data;
 
     return CartaoBranco(
@@ -381,7 +371,11 @@ class _PreVisualizacao extends StatelessWidget {
                   disciplina.isEmpty ? 'Disciplina' : disciplina,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Cores.texto),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Cores.texto,
+                  ),
                 ),
                 if (local.isNotEmpty)
                   Text(
@@ -421,7 +415,7 @@ class _ListaTopicos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final estudados = topicos.where((t) => t.estudado).length;
+    final estudados = Prova.contarEstudados(topicos);
 
     return CartaoBranco(
       padding: EdgeInsets.zero,
@@ -435,32 +429,30 @@ class _ListaTopicos extends StatelessWidget {
               children: [
                 const Text(
                   'Marque o que já estudou',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Cores.textoSuave),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Cores.textoSuave,
+                  ),
                 ),
                 Text(
                   '$estudados de ${topicos.length}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Cores.marinho),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Cores.marinho,
+                  ),
                 ),
               ],
             ),
           ),
           const Divider(height: 1, color: Cores.trilho),
           for (var i = 0; i < topicos.length; i++)
-            CheckboxListTile(
-              value: topicos[i].estudado,
-              onChanged: (valor) => onMarcar(i, valor ?? false),
-              controlAffinity: ListTileControlAffinity.leading,
-              activeColor: Cores.royal,
-              dense: true,
-              title: Text(
-                topicos[i].titulo,
-                style: TextStyle(
-                  fontSize: 15,
-                  color: topicos[i].estudado ? Cores.textoSuave : Cores.texto,
-                  decoration: topicos[i].estudado ? TextDecoration.lineThrough : null,
-                ),
-              ),
-              secondary: IconButton(
+            ItemTopico(
+              titulo: topicos[i].titulo,
+              estudado: topicos[i].estudado,
+              onChanged: (valor) => onMarcar(i, valor),
+              acaoExtra: IconButton(
                 tooltip: 'Remover tópico',
                 icon: const Icon(Icons.close, size: 18, color: Cores.textoSuave),
                 onPressed: () => onRemover(i),
@@ -536,7 +528,11 @@ class _OpcaoTipo extends StatelessWidget {
               ),
               Text(
                 tipo.rotulo,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Cores.texto),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Cores.texto,
+                ),
               ),
             ],
           ),
