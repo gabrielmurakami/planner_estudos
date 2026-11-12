@@ -10,7 +10,7 @@ import 'widgets/componentes.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Aula 09: inicialização do Firebase antes do runApp.
+  // Inicialização do Firebase antes do runApp.
   Object? erroFirebase;
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -65,7 +65,7 @@ class PlannerApp extends StatelessWidget {
   }
 }
 
-/// Mostrada quando o firebase_options.dart ainda é o provisório.
+/// firebase_options.dart ainda é o provisório.
 class _TelaErroFirebase extends StatelessWidget {
   const _TelaErroFirebase({required this.erro});
 
